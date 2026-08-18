@@ -1,0 +1,35 @@
+{
+  "collections": [
+    {
+      "name": "users",
+      "fields": [
+        { "name": "uid", "type": "string" },
+        { "name": "email", "type": "string" },
+        { "name": "createdAt", "type": "timestamp" }
+      ],
+      "permissions": [
+        { "operation": "read", "condition": "isOwner" },
+        { "operation": "create", "condition": "isOwner" },
+        { "operation": "update", "condition": "isOwner" },
+        { "operation": "delete", "condition": "isOwner" }
+      ]
+    },
+    {
+      "name": "projects",
+      "fields": [
+        { "name": "ownerId", "type": "string" },
+        { "name": "name", "type": "string" },
+        { "name": "desc", "type": "string" },
+        { "name": "parts", "type": "array" },
+        { "name": "wiringConnections", "type": "array" },
+        { "name": "updatedAt", "type": "timestamp" }
+      ],
+      "permissions": [
+        { "operation": "read", "condition": "isOwner", "ownerField": "ownerId" },
+        { "operation": "create", "condition": "isAuthenticated && request.resource.data.ownerId == request.auth.uid" },
+        { "operation": "update", "condition": "isOwner", "ownerField": "ownerId" },
+        { "operation": "delete", "condition": "isOwner", "ownerField": "ownerId" }
+      ]
+    }
+  ]
+}
