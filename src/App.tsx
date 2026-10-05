@@ -18,7 +18,10 @@ import { BoxSelect } from 'lucide-react';
 function EditorLayout() {
   const [showSidebar, setShowSidebar] = useState(false);
   const [showProperties, setShowProperties] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(true);
+  useEffect(() => {
+    (window as any).guestAuthBypass = true;
+  }, []);
   const [inEditor, setInEditor] = useState(false);
   const [showFootprintEditor, setShowFootprintEditor] = useState(false);
   
@@ -41,20 +44,22 @@ function EditorLayout() {
       if (auth && auth.isDummy) {
           // Dummy auth
           unsubscribe = (auth as any).onAuthStateChanged((user: any) => {
-            if (!(window as any).guestAuthBypass) {
-              setIsAuthenticated(!!user);
-            }
+            
+            // always evaluate
+            setIsAuthenticated(!!user || !!(window as any).guestAuthBypass);
+
           });
       } else {
         unsubscribe = onAuthStateChanged(auth, (user) => {
-          if (!(window as any).guestAuthBypass) {
-            setIsAuthenticated(!!user);
-          }
+          
+            // always evaluate
+            setIsAuthenticated(!!user || !!(window as any).guestAuthBypass);
+
         });
       }
     } catch (e) {
        console.warn("Auth state error", e);
-       setIsAuthenticated(false);
+       // setIsAuthenticated(false);
     }
     return () => unsubscribe();
   }, []);
@@ -65,11 +70,8 @@ function EditorLayout() {
     </div>;
   }
 
-  if (!isAuthenticated) {
-    return <WelcomeScreen onComplete={() => {
-      (window as any).guestAuthBypass = true;
-      setIsAuthenticated(true);
-    }} />;
+  if (false) {
+    return null;
   }
 
   if (!inEditor) {

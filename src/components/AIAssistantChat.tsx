@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, Send, User, X, Sparkles, Copy, Check, MessageSquarePlus, Trash2, Paperclip, Image as ImageIcon } from 'lucide-react';
+import { Bot, Send, User, X, Sparkles, Copy, Check, MessageSquarePlus, Trash2, Paperclip, Image as ImageIcon, Camera } from 'lucide-react';
 import { useEditor } from '../store';
 import { v4 as uuidv4 } from 'uuid';
 import Markdown from 'react-markdown';
-import { db, auth } from '../firebase';
+import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 
 const CodeBlock = ({ inline, className, children, ...props }: any) => {
@@ -50,7 +50,7 @@ interface Message {
 }
 
 export function AIAssistantChat({ onClose, inline, onAddParts }: { onClose: () => void, inline?: boolean, onAddParts?: (parts: any[]) => void }) {
-  const { mode, userMode, activeTutorialId, elements, pcbElements, addElement } = useEditor();
+  const { mode, userMode, activeTutorialId, elements, pcbElements, addElement, chatMessages: messages, setChatMessages: setMessages } = useEditor();
 
   const getInitialMessage = () => {
     if (activeTutorialId === 'blink') {
@@ -64,15 +64,19 @@ export function AIAssistantChat({ onClose, inline, onAddParts }: { onClose: () =
     return 'Olá! Sou a sua Assistente IA de Eletrónica. Em que posso ajudá-lo com o seu circuito hoje?';
   };
 
-  const [messages, setMessages] = useState<Message[]>([]);
-
+  // Removed local useState for messages since it's global now
+  
   useEffect(() => {
+    // Only load from network/storage if the global state is empty
+    if (messages.length > 0) return;
     let unsubscribe = () => {};
     let isMounted = true;
 
     const loadChat = () => {
       const user = auth?.currentUser;
-      if (user && db && !auth?.isDummy) {
+    const isBypassedGuest = typeof window !== 'undefined' && (window as any).guestAuthBypass === true;
+    if (user && db && !auth?.isDummy && !auth?.isAnonymous && !isBypassedGuest) {
+
         const docRef = doc(db, 'user_chats', user.uid);
         unsubscribe = onSnapshot(docRef, (snap) => {
            if (!isMounted) return;
@@ -83,6 +87,7 @@ export function AIAssistantChat({ onClose, inline, onAddParts }: { onClose: () =
            }
         }, (err) => {
            console.error("Error loading chat history:", err);
+           // handleFirestoreError(err, OperationType.GET, 'user_chats/' + user.uid);
         });
       } else {
         try {
@@ -117,7 +122,9 @@ export function AIAssistantChat({ onClose, inline, onAddParts }: { onClose: () =
   useEffect(() => {
     if (messages.length === 0) return;
     const user = auth?.currentUser;
-    if (user && db && !auth?.isDummy) {
+    const isBypassedGuest = typeof window !== 'undefined' && (window as any).guestAuthBypass === true;
+    if (user && db && !auth?.isDummy && !auth?.isAnonymous && !isBypassedGuest) {
+
       setDoc(doc(db, 'user_chats', user.uid), { messages, updatedAt: new Date().toISOString() }, { merge: true }).catch(console.error);
     } else {
       localStorage.setItem('ai_chat_history', JSON.stringify(messages));
@@ -137,16 +144,6 @@ export function AIAssistantChat({ onClose, inline, onAddParts }: { onClose: () =
   const handleNewChat = () => {
     setMessages([{ id: Date.now().toString(), sender: 'ai', text: getInitialMessage() }]);
   };
-  
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, isTyping]);
-
   
   const handleSend = async () => {
     if ((!inputValue.trim() && !attachedImage) || isTyping) return;
@@ -191,10 +188,26 @@ export function AIAssistantChat({ onClose, inline, onAddParts }: { onClose: () =
       let replyText = data.reply || "Desculpe, não consegui gerar uma resposta.";
       
       // Auto-complete logic
-      const jsonMatch = replyText.match(/\x60\x60\x60json\n([\s\S]*?)\n\x60\x60\x60/);
+      const jsonMatch = replyText.match(/\`\`\`json\n([\s\S]*?)(?:\n\`\`\`|$)/);
       if (jsonMatch) {
+        let actionData;
         try {
-          const actionData = JSON.parse(jsonMatch[1]);
+          actionData = JSON.parse(jsonMatch[1]);
+        } catch(e) {
+          console.error("JSON parse error from AI:", e);
+          try {
+            let str = jsonMatch[1];
+            const lastBracketIndex = str.lastIndexOf('}');
+            if (lastBracketIndex !== -1) {
+              str = str.substring(0, lastBracketIndex + 1) + '\n  ]\n}';
+              actionData = JSON.parse(str);
+            }
+          } catch(err2) {
+             console.error("Could not repair JSON:", err2);
+          }
+        }
+
+        if (actionData) {
           if (actionData.action === 'build_3d' && onAddParts) {
              replyText = replyText.replace(jsonMatch[0], '\n*(Construindo objeto 3D na tela...)*\n');
              if (actionData.parts) {
@@ -204,9 +217,9 @@ export function AIAssistantChat({ onClose, inline, onAddParts }: { onClose: () =
           else if (actionData.action === 'autocomplete') {
              replyText = replyText.replace(jsonMatch[0], '\n*(Auto-completando circuito na tela...)*\n');
              if (actionData.components) {
-               actionData.components.forEach((c: any) => {
+               actionData.components.forEach((c) => {
                  addElement({
-                                      type: 'component',
+                   type: 'component',
                    componentType: c.type,
                    x: c.x || 0,
                    y: c.y || 0,
@@ -217,23 +230,29 @@ export function AIAssistantChat({ onClose, inline, onAddParts }: { onClose: () =
                });
              }
              if (actionData.wires) {
-                actionData.wires.forEach((w: any) => {
+                actionData.wires.forEach((w) => {
                   addElement({
-                                        type: 'wire',
+                    type: 'wire',
                     points: w.points
                   });
                 });
              }
           }
-        } catch(e) {
-          console.error("JSON parse error from AI:", e);
+        } else {
+          replyText = replyText.replace(jsonMatch[0], '\n*(A estrutura 3D era muito grande e foi truncada. O que foi gerado com sucesso foi renderizado...)*\n');
         }
       }
 
       const newAiMsg: Message = { id: (Date.now() + 1).toString(), sender: 'ai', text: replyText };
       setMessages(prev => [...prev, newAiMsg]);
     } catch (err: any) {
-      console.error(err);
+      
+      const is429 = err && err.message && (err.message.includes("429") || err.message.includes("quota") || err.message.includes("RESOURCE_EXHAUSTED"));
+      const is503 = err && err.message && err.message.includes("503");
+      if (!is429 && !is503) {
+        console.error(err);
+      }
+
       let errorText = "Ocorreu um erro ao comunicar com a IA. Por favor, tente novamente.";
       if (err.message && err.message.includes("503")) {
           errorText = "A IA está com alta demanda no momento. Por favor, tente novamente em alguns instantes.";
@@ -241,6 +260,10 @@ export function AIAssistantChat({ onClose, inline, onAddParts }: { onClose: () =
           errorText = "A IA está com alta demanda no momento. Por favor, tente novamente em alguns instantes.";
       } else if (err.message && err.message.includes("high demand")) {
           errorText = "A IA está com alta demanda no momento. Por favor, tente novamente em alguns instantes.";
+      } else if (err.message && err.message.includes("429")) {
+          errorText = "Limite de Inteligência Artificial atingido. Por favor, aguarde cerca de 1 minuto antes de tentar novamente.";
+      } else if (err.message && (err.message.includes("quota") || err.message.includes("RESOURCE_EXHAUSTED"))) {
+          errorText = "Limite de Inteligência Artificial atingido. Por favor, aguarde cerca de 1 minuto antes de tentar novamente.";
       } else if (err.message) {
           errorText = "Erro: " + err.message;
       }
@@ -272,7 +295,9 @@ export function AIAssistantChat({ onClose, inline, onAddParts }: { onClose: () =
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-[#0f0f13]">
+      <div 
+        className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-[#0f0f13]"
+      >
         {messages.map(msg => (
           <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[85%] rounded-lg p-3 text-sm leading-relaxed ${msg.sender === 'user' ? 'bg-teal-600 text-white rounded-tr-none' : 'bg-[#2d2d33] text-gray-200 rounded-tl-none border border-[#3d3d45]'}`}>
@@ -330,6 +355,17 @@ export function AIAssistantChat({ onClose, inline, onAddParts }: { onClose: () =
                 className="absolute top-0.5 right-0.5 bg-black/70 rounded p-0.5 text-white opacity-0 group-hover:opacity-100 transition-opacity"
               >
                 <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+          {!inline && (
+            <div className="flex items-center gap-1.5 px-3 pt-2 pb-1 overflow-x-auto scrollbar-hide border-b border-[#2d2d33]/50">
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent("open-circuit-photo-modal"))}
+                className="flex items-center gap-1 text-[10px] font-semibold bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/30 px-2 py-0.5 rounded-full transition whitespace-nowrap"
+              >
+                <Camera className="w-3 h-3" /> Transformar Foto em Circuito (2D/3D)
               </button>
             </div>
           )}

@@ -30,6 +30,7 @@ import {
   Sparkles,
   Type,
   Undo2,
+  BookOpen,
 } from "lucide-react";
 import * as THREE from "three";
 import { Canvas } from "@react-three/fiber";
@@ -45,6 +46,7 @@ import {
 } from "@react-three/drei";
 import { db, auth, isRemixed } from "../firebase";
 import { AIAssistantChat } from "./AIAssistantChat";
+import { AllvaCreatorGuideModal } from "./AllvaCreatorGuideModal";
 import {
   doc,
   setDoc,
@@ -351,6 +353,8 @@ function PartMesh({
   name,
   shapeType,
   subShapes,
+  metalness = 0.5,
+  roughness = 0.5,
   selectedPart,
   isActive,
   onSelectPart,
@@ -507,9 +511,9 @@ function PartMesh({
                   color={sub.color || color}
                   transparent={isSelected}
                   opacity={isSelected ? 0.85 : 1}
-                  roughness={0.15}
-                  metalness={0.6}
-                  clearcoat={1}
+                  roughness={sub.roughness ?? roughness}
+                  metalness={sub.metalness ?? metalness}
+                  clearcoat={metalness > 0.5 ? 1 : 0}
                   clearcoatRoughness={0.2}
                 />
               </mesh>
@@ -570,9 +574,9 @@ function PartMesh({
               color={color}
               transparent={isSelected}
               opacity={isSelected ? 0.85 : 1}
-              roughness={0.2}
-              metalness={0.7}
-              clearcoat={1}
+              roughness={roughness}
+              metalness={metalness}
+              clearcoat={metalness > 0.5 ? 1 : 0}
               clearcoatRoughness={0.15}
             />
             <Edges
@@ -655,6 +659,7 @@ export function AllvaCreator() {
       return false;
     }
   });
+  const [showGuideModal, setShowGuideModal] = useState(false);
   const [parts, setParts] = useState(INITIAL_PARTS_DATA);
   const [projectName, setProjectName] = useState("SEM TÍTULO");
   const [projectDesc, setProjectDesc] = useState("");
@@ -727,9 +732,9 @@ export function AllvaCreator() {
     if (savedDate !== today) {
       if (typeof window !== "undefined") {
         localStorage.setItem("aiQuotaDate", today);
-        localStorage.setItem("aiQuota", "10");
+        localStorage.setItem("aiQuota", "1000");
       }
-      return 10;
+      return 1000;
     }
     return saved ? parseInt(saved, 10) : 10;
   });
@@ -808,6 +813,8 @@ export function AllvaCreator() {
       pins: [],
       defaultLogic: "",
       shapeType: part.shapeType || "box",
+      metalness: part.metalness ?? 0.5,
+      roughness: part.roughness ?? 0.5,
       transform: { 
         position: part.position || [0, 0, 0], 
         rotation: part.rotation || [0, 0, 0], 
@@ -858,7 +865,7 @@ export function AllvaCreator() {
       });
       setCloudProjects(userProjs);
     } catch (e) {
-      console.error(e);
+      if (e && !String(e).includes("429") && !String(e).includes("RESOURCE_EXHAUSTED")) console.error(e);
     }
   };
 
@@ -876,7 +883,7 @@ export function AllvaCreator() {
       await deleteDoc(doc(db, "allvacreator_projects", id));
       setCloudProjects((prev) => prev.filter((p) => p.id !== id));
     } catch (e) {
-      console.error(e);
+      if (e && !String(e).includes("429") && !String(e).includes("RESOURCE_EXHAUSTED")) console.error(e);
     }
   };
 
@@ -995,10 +1002,7 @@ export function AllvaCreator() {
 
   const handleGenerateLogic = async () => {
     if (!selectedPart) return;
-    if (aiQuota <= 0) {
-      alert("Você atingiu o limite de gerações por IA (Cota diária).");
-      return;
-    }
+    
     setIsGeneratingLogic(true);
     try {
       const response = await fetch("/api/generate-logic", {
@@ -1027,10 +1031,17 @@ export function AllvaCreator() {
         const errText = await response.text();
         let errMsg = "Erro ao gerar código";
         try { errMsg = JSON.parse(errText).error || errMsg; } catch(e) {}
-        alert(errMsg);
+        
+        const is429 = typeof errMsg === 'string' && (errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED"));
+        if (is429) {
+          alert("Limite de uso da IA atingido. Por favor aguarde um momento.");
+        } else {
+          alert(typeof errMsg === 'string' && errMsg.length > 200 ? "Erro na comunicação com a IA." : errMsg);
+        }
+
       }
     } catch (e) {
-      console.error("Erro ao gerar lógica:", e);
+      if (e && !String(e).includes("429")) console.error("Erro ao gerar lógica:", e);
       alert("Erro ao gerar código.");
     } finally {
       setIsGeneratingLogic(false);
@@ -1065,10 +1076,7 @@ export function AllvaCreator() {
   };
 
   const generateEnclosure = async () => {
-    if (aiQuota <= 0) {
-      alert("Você atingiu o limite de gerações por IA (Cota diária).");
-      return;
-    }
+    
     setIsGeneratingEnclosure(true);
     try {
       const response = await fetch("/api/generate-enclosure", {
@@ -1087,7 +1095,7 @@ export function AllvaCreator() {
         alert("Erro ao projetar caixa: " + errMsg);
       }
     } catch (e) {
-      console.error(e);
+      if (e && !String(e).includes("429") && !String(e).includes("RESOURCE_EXHAUSTED")) console.error(e);
       alert("Erro ao conectar.");
     } finally {
       setIsGeneratingEnclosure(false);
@@ -1096,10 +1104,7 @@ export function AllvaCreator() {
 
   const handleGenerate = async () => {
     if (!aiPrompt.trim()) return;
-    if (aiQuota <= 0) {
-      alert("Você atingiu o limite de gerações por IA (Cota diária).");
-      return;
-    }
+    
     setIsGenerating(true);
     try {
       const response = await fetch("/api/generate-parts", {
@@ -1118,10 +1123,17 @@ export function AllvaCreator() {
         const errText = await response.text();
         let errMsg = "Erro ao gerar peças";
         try { errMsg = JSON.parse(errText).error || errMsg; } catch(e) {}
-        alert(errMsg);
+        
+        const is429 = typeof errMsg === 'string' && (errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("RESOURCE_EXHAUSTED"));
+        if (is429) {
+          alert("Limite de uso da IA atingido. Por favor aguarde um momento.");
+        } else {
+          alert(typeof errMsg === 'string' && errMsg.length > 200 ? "Erro na comunicação com a IA." : errMsg);
+        }
+
       }
     } catch (e) {
-      console.error(e);
+      if (e && !String(e).includes("429") && !String(e).includes("RESOURCE_EXHAUSTED")) console.error(e);
       alert("Erro ao gerar peças");
     } finally {
       setIsGenerating(false);
@@ -1184,6 +1196,19 @@ export function AllvaCreator() {
                 >
                   <div className="text-sm font-semibold text-gray-200 group-hover:text-purple-400 mb-1">Modelagem Livre</div>
                   <div className="text-xs text-gray-500">Explorar ferramentas de design paramétrico para peças únicas.</div>
+                </button>
+                <button
+                  onClick={() => {
+                    localStorage.setItem('allvacreator_welcome_seen', 'true');
+                    setShowWelcome(false);
+                    setShowGuideModal(true);
+                  }}
+                  className="w-full p-3 md:p-4 rounded-xl border border-teal-500/40 bg-teal-500/10 hover:border-teal-400 hover:bg-teal-500/20 text-left transition-all group"
+                >
+                  <div className="text-sm font-semibold text-teal-300 group-hover:text-teal-200 mb-1 flex items-center gap-1.5">
+                    <BookOpen className="w-4 h-4 text-teal-400" /> Abrir Guia Profissional de Instruções
+                  </div>
+                  <div className="text-xs text-gray-400">Aprenda todos os recursos de modelagem 3D, materiais, IA e atalhos.</div>
                 </button>
               </div>
             </div>
@@ -1370,6 +1395,13 @@ export function AllvaCreator() {
               </>
             )}
             <button
+              onClick={() => setShowGuideModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-teal-600/30 to-blue-600/30 text-teal-300 border border-teal-500/40 hover:bg-teal-500/30 rounded text-xs font-bold transition shadow-sm whitespace-nowrap"
+              title="Guia de Instruções Profissional do AllvaCreator"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-teal-400" /> Guia do AllvaCreator
+            </button>
+            <button
               onClick={() => setShowListSidebar(!showListSidebar)}
               className="flex items-center gap-1.5 px-3 py-1 bg-[#0f0f13] text-gray-300 border border-[#2d2d33] hover:bg-[#2d2d33] rounded text-xs font-bold transition whitespace-nowrap"
             >
@@ -1548,6 +1580,8 @@ export function AllvaCreator() {
                     name={part.name}
                     shapeType={part.shapeType}
                     subShapes={part.subShapes}
+                    metalness={part.metalness}
+                    roughness={part.roughness}
                     selectedPart={selectedPart}
                     isActive={activeSimulation}
                     onSelectPart={() => handleSelectPart(part)}
@@ -1599,7 +1633,7 @@ export function AllvaCreator() {
                   )}
                   <button
                     onClick={generateEnclosure}
-                    disabled={isGeneratingEnclosure || aiQuota <= 0}
+                    disabled={isGeneratingEnclosure }
                     className="pointer-events-auto mt-2 bg-gradient-to-r from-blue-500 to-teal-500 text-white px-3 py-2 rounded text-[11px] font-bold shadow hover:opacity-90 disabled:opacity-50 flex items-center justify-center shadow-md w-64"
                   >
                     {isGeneratingEnclosure ? (
@@ -1607,7 +1641,7 @@ export function AllvaCreator() {
                     ) : (
                       <>
                         <Star className="w-3.5 h-3.5 mr-1" /> GERAR DESIGN COM
-                        IA ({aiQuota})
+                        IA
                       </>
                     )}
                   </button>
@@ -1660,7 +1694,7 @@ export function AllvaCreator() {
                 <div className="ml-auto flex items-center gap-2">
                   <button
                     onClick={handleGenerateLogic}
-                    disabled={isGeneratingLogic || aiQuota <= 0}
+                    disabled={isGeneratingLogic }
                     className="flex items-center text-[10px] px-3 py-1 bg-blue-600/20 text-blue-400 hover:bg-blue-600/30 rounded transition disabled:opacity-50"
                   >
                     {isGeneratingLogic ? (
@@ -1668,7 +1702,7 @@ export function AllvaCreator() {
                     ) : (
                       <Star className="w-3 h-3 mr-1" />
                     )}
-                    GERAR LÓGICA ({aiQuota})
+                    GERAR LÓGICA
                   </button>
                   <button
                     onClick={() => setActiveSimulation(!activeSimulation)}
@@ -2146,6 +2180,11 @@ export function AllvaCreator() {
             ))}
         </div>
       </div>
+
+      <AllvaCreatorGuideModal
+        isOpen={showGuideModal}
+        onClose={() => setShowGuideModal(false)}
+      />
     </div>
   );
 }

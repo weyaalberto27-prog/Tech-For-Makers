@@ -990,6 +990,8 @@ export function CanvasEditor() {
         else if (tool === "timer555") defValue = "NE555";
         else if (tool === "opamp") defValue = "LM741";
         else if (tool === "lamp") defValue = "220V";
+        else if (["arduino_uno", "attiny85", "raspberry_pi"].includes(tool)) defValue = "5V";
+        else if (["esp32", "esp32s3", "esp32_cam", "stm32_bluepill", "esp8266"].includes(tool)) defValue = "3.3V";
 
         const newComp: any = {
           type: "component",

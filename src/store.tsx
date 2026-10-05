@@ -4,6 +4,13 @@ import { v4 as uuidv4 } from 'uuid';
 
 type AddElementPayload = Omit<WireEntity, 'id'> | Omit<ComponentEntity, 'id'> | Omit<TraceEntity, 'id'> | Omit<PcbComponentEntity, 'id'> | Omit<PcbBoardEntity, 'id'>;
 
+export interface ChatMessage {
+  id: string;
+  sender: 'ai' | 'user';
+  text: string;
+  imageBase64?: string;
+}
+
 interface EditorContextType {
   mode: EditorMode;
   setMode: (m: EditorMode) => void;
@@ -65,6 +72,8 @@ interface EditorContextType {
   customComponents: any[];
   setCustomComponents: (components: any[]) => void;
   addCustomComponent: (component: any) => void;
+  chatMessages: ChatMessage[];
+  setChatMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
 }
 
 const EditorContext = createContext<EditorContextType | undefined>(undefined);
@@ -109,6 +118,7 @@ export function EditorProvider({ children }: { children: ReactNode }) {
   const [activeTutorialId, setActiveTutorialId] = useState<string | null>(null);
   const [isAIChatOpen, setIsAIChatOpen] = useState(false);
   const [customComponents, setCustomComponents] = useState<any[]>([]);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
   const addCustomComponent = (comp: any) => {
     setCustomComponents(prev => [...prev, comp]);
@@ -231,7 +241,8 @@ export function EditorProvider({ children }: { children: ReactNode }) {
         wireDirection, setWireDirection,
         activeTutorialId, setActiveTutorialId,
         isAIChatOpen, setIsAIChatOpen,
-        customComponents, setCustomComponents, addCustomComponent
+        customComponents, setCustomComponents, addCustomComponent,
+        chatMessages, setChatMessages
       }}
     >
       {children}

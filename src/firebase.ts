@@ -18,9 +18,9 @@ if (!isRemixed) {
       app = getApp();
     }
     if (configAny.firestoreDatabaseId) {
-      db = initializeFirestore(app, { experimentalForceLongPolling: true }, configAny.firestoreDatabaseId);
+      db = getFirestore(app, configAny.firestoreDatabaseId);
     } else {
-      db = initializeFirestore(app, { experimentalForceLongPolling: true });
+      db = getFirestore(app);
     }
     auth = getAuth(app);
   } catch (e) {
@@ -45,8 +45,6 @@ if (googleProvider) {
   googleProvider.setCustomParameters({
     prompt: 'select_account'
   });
-  googleProvider.addScope('https://www.googleapis.com/auth/gmail.readonly');
-  googleProvider.addScope('https://www.googleapis.com/auth/gmail.send');
 }
 
 export let cachedAccessToken: string | null = null;
