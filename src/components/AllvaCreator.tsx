@@ -30,7 +30,6 @@ import {
   Sparkles,
   Type,
   Undo2,
-  BookOpen,
 } from "lucide-react";
 import * as THREE from "three";
 import { Canvas } from "@react-three/fiber";
@@ -46,7 +45,6 @@ import {
 } from "@react-three/drei";
 import { db, auth, isRemixed } from "../firebase";
 import { AIAssistantChat } from "./AIAssistantChat";
-import { AllvaCreatorGuideModal } from "./AllvaCreatorGuideModal";
 import {
   doc,
   setDoc,
@@ -659,7 +657,6 @@ export function AllvaCreator() {
       return false;
     }
   });
-  const [showGuideModal, setShowGuideModal] = useState(false);
   const [parts, setParts] = useState(INITIAL_PARTS_DATA);
   const [projectName, setProjectName] = useState("SEM TÍTULO");
   const [projectDesc, setProjectDesc] = useState("");
@@ -1197,19 +1194,6 @@ export function AllvaCreator() {
                   <div className="text-sm font-semibold text-gray-200 group-hover:text-purple-400 mb-1">Modelagem Livre</div>
                   <div className="text-xs text-gray-500">Explorar ferramentas de design paramétrico para peças únicas.</div>
                 </button>
-                <button
-                  onClick={() => {
-                    localStorage.setItem('allvacreator_welcome_seen', 'true');
-                    setShowWelcome(false);
-                    setShowGuideModal(true);
-                  }}
-                  className="w-full p-3 md:p-4 rounded-xl border border-teal-500/40 bg-teal-500/10 hover:border-teal-400 hover:bg-teal-500/20 text-left transition-all group"
-                >
-                  <div className="text-sm font-semibold text-teal-300 group-hover:text-teal-200 mb-1 flex items-center gap-1.5">
-                    <BookOpen className="w-4 h-4 text-teal-400" /> Abrir Guia Profissional de Instruções
-                  </div>
-                  <div className="text-xs text-gray-400">Aprenda todos os recursos de modelagem 3D, materiais, IA e atalhos.</div>
-                </button>
               </div>
             </div>
           </div>
@@ -1394,13 +1378,6 @@ export function AllvaCreator() {
                 </label>
               </>
             )}
-            <button
-              onClick={() => setShowGuideModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-teal-600/30 to-blue-600/30 text-teal-300 border border-teal-500/40 hover:bg-teal-500/30 rounded text-xs font-bold transition shadow-sm whitespace-nowrap"
-              title="Guia de Instruções Profissional do AllvaCreator"
-            >
-              <BookOpen className="w-3.5 h-3.5 text-teal-400" /> Guia do AllvaCreator
-            </button>
             <button
               onClick={() => setShowListSidebar(!showListSidebar)}
               className="flex items-center gap-1.5 px-3 py-1 bg-[#0f0f13] text-gray-300 border border-[#2d2d33] hover:bg-[#2d2d33] rounded text-xs font-bold transition whitespace-nowrap"
@@ -2180,11 +2157,6 @@ export function AllvaCreator() {
             ))}
         </div>
       </div>
-
-      <AllvaCreatorGuideModal
-        isOpen={showGuideModal}
-        onClose={() => setShowGuideModal(false)}
-      />
     </div>
   );
 }
