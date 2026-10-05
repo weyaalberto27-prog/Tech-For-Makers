@@ -17,11 +17,13 @@ import {
   FolderOpen,
   Settings,
   Sun,
-  Moon
+  Moon,
+  Camera
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { auth } from "../firebase";
 import { saveProject } from "../services/projects";
+import { CircuitPhotoToCADModal } from "./CircuitPhotoToCADModal";
 
 export function Toolbar({
   toggleLeft,
@@ -67,7 +69,14 @@ export function Toolbar({
   } = useEditor();
 
   const [isSaving, setIsSaving] = React.useState(false);
+  const [showPhotoModal, setShowPhotoModal] = React.useState(false);
   const hasSelection = selectedIds && selectedIds.length > 0;
+
+  React.useEffect(() => {
+    const handleOpenPhoto = () => setShowPhotoModal(true);
+    window.addEventListener("open-circuit-photo-modal", handleOpenPhoto);
+    return () => window.removeEventListener("open-circuit-photo-modal", handleOpenPhoto);
+  }, []);
 
   const loadExample = (type: string) => {
     setActiveTutorialId(type);
@@ -379,6 +388,15 @@ export function Toolbar({
         )}
 
         <button
+          onClick={() => setShowPhotoModal(true)}
+          className="flex items-center text-xs md:text-sm text-cyan-400 hover:text-cyan-300 px-2 md:px-3 py-1.5 rounded hover:bg-[#2d2d33] transition gap-1 md:gap-2 border border-cyan-500/30 mr-1 sm:mr-2 shadow-sm shadow-cyan-500/10"
+          title="Converter Foto de Circuito em Esquemático e PCB (2D & 3D)"
+        >
+          <Camera className="w-4 h-4 text-cyan-400" />
+          <span className="hidden sm:inline">Foto para Circuito (IA)</span>
+        </button>
+
+        <button
           onClick={handleRotate}
           disabled={!hasSelection}
           className={cn(
@@ -435,6 +453,11 @@ export function Toolbar({
           </button>
         )}
       </div>
+
+      <CircuitPhotoToCADModal
+        isOpen={showPhotoModal}
+        onClose={() => setShowPhotoModal(false)}
+      />
     </div>
   );
 }

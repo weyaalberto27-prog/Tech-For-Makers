@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, Send, User, X, Sparkles, Copy, Check, MessageSquarePlus, Trash2, Paperclip, Image as ImageIcon } from 'lucide-react';
+import { Bot, Send, User, X, Sparkles, Copy, Check, MessageSquarePlus, Trash2, Paperclip, Image as ImageIcon, Camera } from 'lucide-react';
 import { useEditor } from '../store';
 import { v4 as uuidv4 } from 'uuid';
 import Markdown from 'react-markdown';
@@ -355,6 +355,17 @@ export function AIAssistantChat({ onClose, inline, onAddParts }: { onClose: () =
                 className="absolute top-0.5 right-0.5 bg-black/70 rounded p-0.5 text-white opacity-0 group-hover:opacity-100 transition-opacity"
               >
                 <X className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+          {!inline && (
+            <div className="flex items-center gap-1.5 px-3 pt-2 pb-1 overflow-x-auto scrollbar-hide border-b border-[#2d2d33]/50">
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent("open-circuit-photo-modal"))}
+                className="flex items-center gap-1 text-[10px] font-semibold bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/30 px-2 py-0.5 rounded-full transition whitespace-nowrap"
+              >
+                <Camera className="w-3 h-3" /> Transformar Foto em Circuito (2D/3D)
               </button>
             </div>
           )}

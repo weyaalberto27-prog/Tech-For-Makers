@@ -48,20 +48,8 @@ const app = express();
       const prompt = req.body.prompt;
       if (!prompt) return res.status(400).json({ error: "No prompt provided" });
 
-      const lastMessage = messages[messages.length - 1];
-      const hasImage = !!lastMessage.imageBase64;
-      const contentParts: any[] = [systemPrompt];
-      if (hasImage && lastMessage.imageBase64) {
-        contentParts.push({
-          inlineData: {
-            data: lastMessage.imageBase64.split(",")[1],
-            mimeType: lastMessage.imageBase64.split(";")[0].split(":")[1]
-          }
-        });
-      }
-
       const response = await fetchWithRetry(() => ai.models.generateContent({
-        model: "gemini-3.6-flash",
+        model: "gemini-3.8-flash",
         contents: `You are an expert hardware and embedded systems engineer. 
 Design an electronic circuit and logic for the following project: "${prompt}". 
 Provide up to 12 core parts, including microcontrollers, sensors, actuators, and passive components.
@@ -157,20 +145,8 @@ Return a JSON array of components following the schema strictly.`,
       if (!componentName)
         return res.status(400).json({ error: "No componentName provided" });
 
-      const lastMessage = messages[messages.length - 1];
-      const hasImage = !!lastMessage.imageBase64;
-      const contentParts: any[] = [systemPrompt];
-      if (hasImage && lastMessage.imageBase64) {
-        contentParts.push({
-          inlineData: {
-            data: lastMessage.imageBase64.split(",")[1],
-            mimeType: lastMessage.imageBase64.split(";")[0].split(":")[1]
-          }
-        });
-      }
-
       const response = await fetchWithRetry(() => ai.models.generateContent({
-        model: "gemini-3.6-flash",
+        model: "gemini-3.8-flash",
         contents: `You are an expert embedded software engineer. Write the C++ (Arduino-style) logic code for a component connected to a microcontroller.
 Component Name: ${componentName}
 Project Context: ${projectPrompt || "A general microcontroller project"}
@@ -180,9 +156,8 @@ Current Logic/Code (if any): ${currentLogic || "None"}
 Please directly output the C++ logic code (setup, loop functions) that should run on the main MCU to interact with this component. Add helpful comments and wire configurations. Respond only with the code itself, no markdown formatting (\`\`\`).`,
       }));
 
-
       res.json({ logicCode: response.text?.trim() || "" });
-        } catch (err: any) {
+    } catch (err: any) {
       const is503 = err.status === 503 || (err?.message && err.message.includes("503"));
       const is429 = err.status === 429 || (err?.message && err.message.includes("429")) || (err?.message && err.message.includes("RESOURCE_EXHAUSTED"));
       if (!is503 && !is429) console.error(err);
@@ -207,7 +182,7 @@ Please directly output the C++ logic code (setup, loop functions) that should ru
       const { messages, circuit, mode, allvaCreatorMode } = req.body;
       const simplifiedCircuit = circuit?.map((c: any) => ({ id: c.id, type: c.componentType || c.type, name: c.name, position: { x: Math.round(c.x), y: Math.round(c.y) } }));
       
-      const historyStr = messages.map((m: any) => `${m.sender === 'ai' ? 'Assistant' : 'User'}: ${m.text}`).join('\n');
+      const historyStr = (messages || []).map((m: any) => `${m.sender === 'ai' ? 'Assistant' : 'User'}: ${m.text}`).join('\n');
 
       const systemPrompt = allvaCreatorMode
         ? `You are an expert 3D architect AI named Allva AI. Your purpose in this workspace is ONLY to build objects and structures using geometric shapes and solids.
@@ -263,25 +238,28 @@ ${historyStr}
 
 Assistant:`;
 
-      const lastMessage = messages[messages.length - 1];
-      const hasImage = !!lastMessage.imageBase64;
-      const contentParts: any[] = [systemPrompt];
+      const lastMessage = (messages && messages.length > 0) ? messages[messages.length - 1] : null;
+      const hasImage = !!(lastMessage && lastMessage.imageBase64);
+      const contentParts: any[] = [{ text: systemPrompt }];
       if (hasImage && lastMessage.imageBase64) {
+        const parts = lastMessage.imageBase64.split(";base64,");
+        const mimeType = parts[0].replace("data:", "") || "image/png";
+        const base64Data = parts[1] || parts[0];
         contentParts.push({
           inlineData: {
-            data: lastMessage.imageBase64.split(",")[1],
-            mimeType: lastMessage.imageBase64.split(";")[0].split(":")[1]
+            data: base64Data,
+            mimeType: mimeType
           }
         });
       }
 
       const response = await fetchWithRetry(() => ai.models.generateContent({
-        model: "gemini-3.6-flash",
+        model: "gemini-3.8-flash",
         contents: contentParts,
       }));
 
       res.json({ reply: response.text?.trim() || "" });
-        } catch (err: any) {
+    } catch (err: any) {
       const is503 = err.status === 503 || (err?.message && err.message.includes("503"));
       const is429 = err.status === 429 || (err?.message && err.message.includes("429")) || (err?.message && err.message.includes("RESOURCE_EXHAUSTED"));
       if (!is503 && !is429) console.error(err);
@@ -305,20 +283,8 @@ Assistant:`;
       const { projectName, parts } = req.body;
       const partNames = parts?.map((p: any) => p.name).join(", ");
 
-      const lastMessage = messages[messages.length - 1];
-      const hasImage = !!lastMessage.imageBase64;
-      const contentParts: any[] = [systemPrompt];
-      if (hasImage && lastMessage.imageBase64) {
-        contentParts.push({
-          inlineData: {
-            data: lastMessage.imageBase64.split(",")[1],
-            mimeType: lastMessage.imageBase64.split(";")[0].split(":")[1]
-          }
-        });
-      }
-
       const response = await fetchWithRetry(() => ai.models.generateContent({
-        model: "gemini-3.6-flash",
+        model: "gemini-3.8-flash",
         contents: `You are an expert industrial designer. Design a highly detailed, professional 3D enclosure for an electronics project.
 Project Name: ${projectName || "Electronic Project"}
 Components Included: ${partNames || "None"}
@@ -354,26 +320,13 @@ Please return ONLY a JSON object (no markdown, no backticks) with the following 
         },
       }));
 
-
       const data = JSON.parse(response.text?.trim() || "{}");
 
       let imageUrl = null;
       try {
         const imagePrompt = `A high quality, photorealistic product photo of a finished electronic device prototype named "${projectName}". ${data.description}. The enclosure is made of ${data.material} and is colored ${data.color}. The design is sleek, modern, and fully assembled with all necessary components.`;
-        
-      const lastMessage = messages[messages.length - 1];
-      const hasImage = !!lastMessage.imageBase64;
-      const contentParts: any[] = [systemPrompt];
-      if (hasImage && lastMessage.imageBase64) {
-        contentParts.push({
-          inlineData: {
-            data: lastMessage.imageBase64.split(",")[1],
-            mimeType: lastMessage.imageBase64.split(";")[0].split(":")[1]
-          }
-        });
-      }
 
-        const response = await fetchWithRetry(() => ai.models.generateContent({
+        const imgResponse = await fetchWithRetry(() => ai.models.generateContent({
           model: "gemini-3.1-flash-image",
           contents: { parts: [{ text: imagePrompt }] },
           config: {
@@ -384,8 +337,8 @@ Please return ONLY a JSON object (no markdown, no backticks) with the following 
           }
         }));
 
-        if (response.candidates?.[0]?.content?.parts) {
-          for (const part of response.candidates[0].content.parts) {
+        if (imgResponse.candidates?.[0]?.content?.parts) {
+          for (const part of imgResponse.candidates[0].content.parts) {
             if (part.inlineData) {
               const base64EncodeString = part.inlineData.data;
               const mimeType = part.inlineData.mimeType || "image/png";
@@ -399,7 +352,7 @@ Please return ONLY a JSON object (no markdown, no backticks) with the following 
       }
 
       res.json({ ...data, imageUrl });
-        } catch (err: any) {
+    } catch (err: any) {
       const is503 = err.status === 503 || (err?.message && err.message.includes("503"));
       const is429 = err.status === 429 || (err?.message && err.message.includes("429")) || (err?.message && err.message.includes("RESOURCE_EXHAUSTED"));
       if (!is503 && !is429) console.error(err);
@@ -420,31 +373,233 @@ Please return ONLY a JSON object (no markdown, no backticks) with the following 
         httpOptions: { headers: { "User-Agent": "aistudio-build" } },
       });
       const { circuit } = req.body;
-      const lastMessage = messages[messages.length - 1];
-      const hasImage = !!lastMessage.imageBase64;
-      const contentParts: any[] = [systemPrompt];
-      if (hasImage && lastMessage.imageBase64) {
-        contentParts.push({
-          inlineData: {
-            data: lastMessage.imageBase64.split(",")[1],
-            mimeType: lastMessage.imageBase64.split(";")[0].split(":")[1]
-          }
-        });
-      }
 
       const response = await fetchWithRetry(() => ai.models.generateContent({
-        model: "gemini-3.6-flash",
+        model: "gemini-3.8-flash",
         contents: `You are an expert electrical engineer. Review the following electronic circuit schematic. Analyze it for errors, missing connections, short circuits, incorrect polarities, and component value problems. Then provide a concise, professional Design Rule Check (DRC) report. 
 
 Circuit Data (JSON format):
 ${JSON.stringify(circuit, null, 2)}`,
       }));
       res.json({ review: response.text?.trim() || "" });
-    } catch (err) {
+    } catch (err: any) {
       const is503 = err.status === 503 || (err?.message && err.message.includes("503"));
       const is429 = err.status === 429 || (err?.message && err.message.includes("429")) || (err?.message && err.message.includes("RESOURCE_EXHAUSTED"));
       if (!is503 && !is429) console.error(err);
-      res.status(400).json({ error: err.message });
+      res.status(400).json({ error: err.message || "Error during circuit review" });
+    }
+  });
+
+  // NEW: Transform circuit photo to 2D & 3D Schematic and PCB!
+  app.post("/api/circuit-from-image", async (req, res) => {
+    try {
+      const dbApiKey = process.env.GEMINI_API_KEY;
+      if (!dbApiKey) {
+        return res
+          .status(400)
+          .json({ error: "Gemini API key is not configured on the server." });
+      }
+      const ai = new GoogleGenAI({
+        apiKey: dbApiKey,
+        httpOptions: { headers: { "User-Agent": "aistudio-build" } },
+      });
+
+      const { imageBase64, userNotes } = req.body;
+      if (!imageBase64) {
+        return res.status(400).json({ error: "Nenhuma imagem foi enviada." });
+      }
+
+      let mimeType = "image/jpeg";
+      let base64Data = imageBase64;
+      if (imageBase64.includes(";base64,")) {
+        const matches = imageBase64.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
+        if (matches) {
+          mimeType = matches[1];
+          base64Data = matches[2];
+        }
+      }
+
+      const promptText = `You are a world-class electronic engineering AI assistant in AllvaTronics CAD.
+Analyze the attached photo of an electronic circuit (which may be a breadboard, physical PCB, hand-drawn schematic diagram, paper sketch, or digital schematic).
+
+YOUR GOAL:
+1. Identify all electronic components visible in the image.
+   Supported component types:
+   - 'resistor', 'capacitor', 'capacitor_elec', 'diode', 'zener_diode', 'led', 'lamp', 'battery', 'battery_9v', 'cr2032', 'powersupply', 'ac_source', 'switch', 'buzzer', 'motor', 'servo_motor', 'transistor', 'transistor_pnp', 'mosfet', 'mosfet_p', 'ic', 'timer555', 'opamp', 'arduino_uno', 'esp32', 'esp32s3', 'esp32_cam', 'raspberry_pi', 'attiny85', 'stm32_bluepill', 'oled', 'potentiometer', 'relay', 'ultrasonic', 'dht11', 'hc05', 'gas_sensor', 'accelerometer', 'gps', 'ground'.
+   Corresponding PCB footprints:
+   - 'pad', 'smd', 'dip8', 'to220', 'sot23', 'sop', 'qfp', 'bga', 'pinheader', 'usb_c', 'cr2032', 'battery_9v', 'crystal'.
+
+2. Formulate the 2D Schematic layout:
+   - Place components on a coordinate grid (X: 150 to 750, Y: 150 to 500) so they are spaced apart logically without colliding.
+   - For each component, provide:
+     * id: unique string (e.g., "comp_1")
+     * type: "component"
+     * componentType: one of the valid types above
+     * name: e.g. "R1", "C1", "LED1", "U1", "Q1", "SW1", "BAT1"
+     * value: detected or estimated value (e.g. "220Ω", "10kΩ", "100nF", "10µF", "9V", "Red", "NE555", "NPN")
+     * x: number (integer)
+     * y: number (integer)
+     * rotation: 0, 90, 180, or 270
+
+3. Formulate the electrical connections (wires):
+   - Provide wires connecting the pins of the components based on how they are wired in the photo.
+   - Each wire must have a points array of 2 or more coordinates [{x, y}, ...]. Ensure start and end points match the component positions/pins.
+
+4. Formulate the 2D PCB layout:
+   - Board dimensions: width (350-550) and height (250-400), boardColor ("green", "blue", "red", "black", "purple")
+   - PCB components with proper footprints, coordinates inside the board (X: 180 to 500, Y: 180 to 450)
+   - PCB copper traces connecting the pads according to the circuit.
+
+5. Provide a professional engineering summary explaining the detected circuit, operation, estimated voltage, and any DRC warnings or tips.
+
+${userNotes ? `Additional user notes: ${userNotes}` : ""}
+
+Return strictly valid JSON conforming to the schema.`;
+
+      const response = await fetchWithRetry(() => ai.models.generateContent({
+        model: "gemini-3.8-flash",
+        contents: {
+          parts: [
+            { inlineData: { mimeType, data: base64Data } },
+            { text: promptText }
+          ]
+        },
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              projectName: { type: Type.STRING, description: "Name of the detected circuit project" },
+              description: { type: Type.STRING, description: "Detailed description of circuit operation and detected components" },
+              detectedPartsSummary: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    name: { type: Type.STRING },
+                    type: { type: Type.STRING },
+                    value: { type: Type.STRING },
+                    function: { type: Type.STRING }
+                  },
+                  required: ["name", "type", "value"]
+                }
+              },
+              schematic: {
+                type: Type.OBJECT,
+                properties: {
+                  components: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        id: { type: Type.STRING },
+                        type: { type: Type.STRING },
+                        componentType: { type: Type.STRING },
+                        name: { type: Type.STRING },
+                        value: { type: Type.STRING },
+                        x: { type: Type.NUMBER },
+                        y: { type: Type.NUMBER },
+                        rotation: { type: Type.NUMBER }
+                      },
+                      required: ["id", "type", "componentType", "name", "x", "y"]
+                    }
+                  },
+                  wires: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        id: { type: Type.STRING },
+                        type: { type: Type.STRING },
+                        points: {
+                          type: Type.ARRAY,
+                          items: {
+                            type: Type.OBJECT,
+                            properties: {
+                              x: { type: Type.NUMBER },
+                              y: { type: Type.NUMBER }
+                            },
+                            required: ["x", "y"]
+                          }
+                        },
+                        color: { type: Type.STRING }
+                      },
+                      required: ["type", "points"]
+                    }
+                  }
+                },
+                required: ["components", "wires"]
+              },
+              pcb: {
+                type: Type.OBJECT,
+                properties: {
+                  board: {
+                    type: Type.OBJECT,
+                    properties: {
+                      width: { type: Type.NUMBER },
+                      height: { type: Type.NUMBER },
+                      boardColor: { type: Type.STRING }
+                    },
+                    required: ["width", "height"]
+                  },
+                  components: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        id: { type: Type.STRING },
+                        type: { type: Type.STRING },
+                        componentType: { type: Type.STRING },
+                        name: { type: Type.STRING },
+                        value: { type: Type.STRING },
+                        x: { type: Type.NUMBER },
+                        y: { type: Type.NUMBER },
+                        rotation: { type: Type.NUMBER },
+                        layer: { type: Type.STRING }
+                      },
+                      required: ["id", "type", "componentType", "name", "x", "y"]
+                    }
+                  },
+                  traces: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        id: { type: Type.STRING },
+                        type: { type: Type.STRING },
+                        layer: { type: Type.STRING },
+                        points: {
+                          type: Type.ARRAY,
+                          items: {
+                            type: Type.OBJECT,
+                            properties: {
+                              x: { type: Type.NUMBER },
+                              y: { type: Type.NUMBER }
+                            },
+                            required: ["x", "y"]
+                          }
+                        },
+                        width: { type: Type.NUMBER }
+                      },
+                      required: ["type", "layer", "points"]
+                    }
+                  }
+                },
+                required: ["board", "components", "traces"]
+              }
+            },
+            required: ["projectName", "description", "detectedPartsSummary", "schematic", "pcb"]
+          }
+        }
+      }));
+
+      const parsed = JSON.parse(response.text?.trim() || "{}");
+      res.json(parsed);
+    } catch (err: any) {
+      const is503 = err.status === 503 || (err?.message && err.message.includes("503"));
+      const is429 = err.status === 429 || (err?.message && err.message.includes("429")) || (err?.message && err.message.includes("RESOURCE_EXHAUSTED"));
+      if (!is503 && !is429) console.error("Error in circuit-from-image:", err);
+      res.status(400).json({ error: err.message || "Falha ao processar foto do circuito." });
     }
   });
 
